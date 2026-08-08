@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>OrionInbox</PackageId>
+    <Description>The consumer-side other half of OrionPatch: a transport-agnostic transactional inbox for exactly-once message effects. Declare an IInboxHandler&lt;T&gt; and ProcessAsync dedups the message id and runs the handler in one atomic transaction, so a redelivered message lands once. This package is the framework-free core (handler, message, result, options, telemetry); add OrionInbox.EntityFrameworkCore for the store.</Description>
+    <PackageTags>orion;inbox;exactly-once;idempotency;dedup;messaging;outbox;transactional</PackageTags>
+    <RootNamespace>Moongazing.OrionInbox</RootNamespace>
+    <Product>OrionInbox</Product>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Orion.Abstractions" />
+    <PackageReference Include="OrionClock" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moongazing.OrionInbox.Tests" />
+    <InternalsVisibleTo Include="Moongazing.OrionInbox.EntityFrameworkCore" />
+    <InternalsVisibleTo Include="Moongazing.OrionInbox.EntityFrameworkCore.Tests" />
+  </ItemGroup>
+</Project>

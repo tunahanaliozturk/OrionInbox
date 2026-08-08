@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>OrionInbox.EntityFrameworkCore</PackageId>
+    <Description>EF Core storage for OrionInbox. Adds the OrionInbox_Messages dedup table and an atomic ProcessAsync that inserts the dedup row and runs the handler's writes in one transaction, keyed by a unique constraint so concurrent redeliveries collapse to a single effect. Includes AddOrionInbox&lt;TDbContext&gt; wiring and a background prune of expired dedup rows off OrionClock.</Description>
+    <PackageTags>orion;inbox;exactly-once;ef-core;entity-framework;dedup;transactional;messaging</PackageTags>
+    <RootNamespace>Moongazing.OrionInbox.EntityFrameworkCore</RootNamespace>
+    <Product>OrionInbox.EntityFrameworkCore</Product>
+    <!--
+      Not marked IsAotCompatible: EF Core is not NativeAOT/trim-clean, so a full AOT publish of
+      this package would surface IL warnings from EF Core itself. The framework-free OrionInbox
+      core carries the AOT smoke; this package is trim-annotated best-effort but not AOT-published.
+    -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Moongazing.OrionInbox\Moongazing.OrionInbox.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moongazing.OrionInbox.EntityFrameworkCore.Tests" />
+  </ItemGroup>
+</Project>

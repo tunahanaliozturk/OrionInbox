@@ -1,0 +1,43 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.7.0</Version>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Audit the whole transitive graph (not just direct references, the default), and surface
+      package-vulnerability advisories (NU1901-1904) as warnings rather than errors, so a
+      newly-disclosed upstream CVE shows up loudly without turning CI red on an external event
+      with no code change. Remove WarningsNotAsErrors to make advisories hard build errors.
+      NU1900 (advisory feed unreachable) and CS1591 (missing XML doc) stay suppressed.
+    -->
+    <NoWarn>CS1591;NU1900</NoWarn>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Authors>Tunahan Ali Ozturk</Authors>
+    <Company>Moongazing</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/tunahanaliozturk/OrionInbox</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tunahanaliozturk/OrionInbox</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <!--
+    Pack the icon, logo, and README into every packable project from one place, so a newly added
+    sub-package can never ship to NuGet without them.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)docs/icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)docs/logo.png" Pack="true" PackagePath="docs/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>
