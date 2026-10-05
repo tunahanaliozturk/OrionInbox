@@ -1,11 +1,16 @@
 <p align="center">
-  <img src="docs/logo.png" alt="OrionInbox" width="150" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo.png">
+    <img src="docs/icon.png" alt="OrionInbox logo" width="150">
+  </picture>
 </p>
 
 # OrionInbox
 
 [![CI/CD](https://github.com/tunahanaliozturk/OrionInbox/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/tunahanaliozturk/OrionInbox/actions/workflows/ci-cd.yml)
 [![NuGet](https://img.shields.io/nuget/v/OrionInbox.svg)](https://www.nuget.org/packages/OrionInbox/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%209.0%20%7C%2010.0-purple.svg)
 
 The consumer-side other half of [OrionPatch](https://github.com/tunahanaliozturk/OrionPatch): a transactional **inbox** that makes a message's *effects* exactly-once. An at-least-once broker plus an idempotent inbox equals a message that lands once.
 
@@ -15,22 +20,16 @@ OrionInbox is the disciplined version: **the dedup-row insert and the handler's 
 
 ## The outbox → inbox loop
 
-```
-Producer service                    Broker (at-least-once)     Consumer service
-────────────────                    ──────────────────────     ────────────────
-write + OrionPatch.Enqueue   ──event──▶  (may redeliver)   OrionInbox.ProcessAsync(messageId)
- (state + outbox row: one txn)                               ├─ id seen? ─▶ yes ─▶ skip, ack   (Duplicate)
-        │                                                    └─ no ─▶ [ handler writes + dedup row ] one txn ─▶ ack
-        ▼
-OrionPatch dispatcher (≥1) ─────────────────────────────▶  duplicate deliveries absorbed here
-```
+![OrionInbox overview: a producer writes state and an outbox row, the broker delivers at least once, your consumer calls IOrionInbox.ProcessAsync, and EfCoreInbox commits the dedup row and your handler's writes in one transaction; a background prune deletes expired rows](docs/diagrams/overview.png)
 
 Outbox (send ≥1) ∘ Inbox (effect ≤1) = **exactly-once effects**, end to end — the guarantee neither half gives alone.
 
 ## Packages
 
-- **`OrionInbox`** — the framework-free core: `IInboxHandler<T>`, `InboxMessage<T>`, `InboxResult`, `InboxOptions`, and OpenTelemetry. AOT- and trim-clean.
-- **`OrionInbox.EntityFrameworkCore`** — the EF Core store: the dedup table, the atomic `ProcessAsync`, `AddOrionInbox<TDbContext>` wiring, and a background prune.
+| Package | What it is |
+|---------|------------|
+| [`OrionInbox`](https://www.nuget.org/packages/OrionInbox/) | The framework-free core: `IOrionInbox`, `IInboxHandler<T>`, `InboxMessage<T>`, `InboxResult` / `InboxStatus`, `InboxOptions` and `InboxDiagnostics` (OpenTelemetry). AOT- and trim-clean. |
+| [`OrionInbox.EntityFrameworkCore`](https://www.nuget.org/packages/OrionInbox.EntityFrameworkCore/) | The EF Core store: the `OrionInbox_Messages` dedup table (`ApplyOrionInboxConfiguration`), the atomic `EfCoreInbox<TDbContext>`, `AddOrionInbox<TDbContext>` / `AddInboxHandler<TMessage, THandler>` wiring, and the background prune `InboxPruneHostedService<TDbContext>`. |
 
 ## Install
 
@@ -78,6 +77,8 @@ public sealed class OrderPaidHandler : IInboxHandler<OrderPaid>
 Wire it up:
 
 ```csharp
+using Moongazing.OrionInbox.EntityFrameworkCore.DependencyInjection;
+
 services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString));
 services.AddOrionInbox<AppDbContext>(o =>
 {
@@ -97,18 +98,35 @@ InboxResult result = await inbox.ProcessAsync(envelope.MessageId, payload, ct);
 // First delivery : handler ran, dedup row + effects committed together -> Processed.
 // Redelivery     : handler skipped, no effect -> Duplicate.
 // Either way, acknowledge the message to the broker.
+// If ProcessAsync throws, nothing was committed: do not acknowledge, let the broker redeliver.
 ```
+
+![How EfCoreInbox.ProcessAsync handles one delivery: an existing row returns Duplicate; otherwise it inserts the dedup row first, a key conflict re-queries and returns Duplicate, the handler runs in the same transaction, and a throwing handler rolls everything back](docs/diagrams/process-message.png)
+
+### Options
+
+| `InboxOptions` | Default | Meaning |
+|----------------|---------|---------|
+| `Consumer` | `""` | The consumer scope the inbox dedups under. Give independent consumers that share one table distinct names; the dedup key is (`MessageId`, `Consumer`). |
+| `DedupWindow` | 7 days | How long a processed id is remembered. A redelivery after the window is processed again, so keep it longer than the broker's redelivery horizon. |
+| `PruneInterval` | 1 hour | How often the background prune runs. `Timeout.InfiniteTimeSpan` disables it. |
+| `PruneBatchSize` | 1000 | Maximum rows deleted per batch; a sweep repeats until the backlog is drained. |
+
+A non-positive `DedupWindow`, `PruneInterval` (other than `Timeout.InfiniteTimeSpan`) or `PruneBatchSize` throws `ArgumentOutOfRangeException` when the options are first resolved.
 
 ## What it guarantees
 
 - **Atomic dedup + effect.** The dedup row and the handler's writes commit in one transaction. A crash between them is impossible: either both are durable or neither is, so a redelivery retries cleanly.
 - **Concurrency-safe.** Two simultaneous deliveries of the same id race on the unique key; exactly one wins and runs the handler, the other returns `Duplicate` before its handler runs. (Verified by a test that fires the same id 100× concurrently and asserts exactly one effect row and 99 duplicates.)
-- **Bounded growth.** A background service prunes dedup rows past `DedupWindow`, in batches, on the family clock — so a fake clock fast-forwards retention in tests.
-- **Provider-agnostic.** Works on any relational EF Core provider; duplicate detection re-queries existence rather than parsing provider-specific error codes.
+- **Clean retry.** A handler that throws rolls back the dedup row with its writes, and the exception reaches your consumer. Nothing is recorded, so the broker's redelivery runs the handler again.
+- **Bounded growth.** A background service prunes the configured consumer's dedup rows past `DedupWindow`, in batches, on the family clock — so a fake clock fast-forwards retention in tests.
+- **Provider-agnostic.** Works on any relational EF Core provider; duplicate detection re-queries existence rather than parsing provider-specific error codes. A `DbUpdateException` whose row does not exist afterwards is a real storage fault and is rethrown. Not yet supported: a retrying execution strategy (`EnableRetryOnFailure`), which rejects the user-initiated transaction `ProcessAsync` opens.
+
+![The same message id delivered three times: the first attempt's handler throws and nothing is stored, the redelivery commits and returns Processed, a later redelivery returns Duplicate; the prune forgets ids after DedupWindow](docs/diagrams/delivery-retry.png)
 
 ## Observability
 
-A `Moongazing.OrionInbox` meter and activity source: `orion.inbox.processed`, `orion.inbox.duplicate`, and `orion.inbox.pruned`, plus a per-delivery `OrionInbox.process` span. Built on the family's `OrionInstrumentation` spine, so multi-tenant / multi-region labels stamp every measurement.
+A `Moongazing.OrionInbox` meter and activity source: `orion.inbox.processed`, `orion.inbox.duplicate`, and `orion.inbox.pruned`, plus a per-delivery `OrionInbox.process` span tagged `orion.inbox.outcome` (`processed` or `duplicate`). Built on the family's `OrionInstrumentation` spine, so multi-tenant / multi-region labels stamp every measurement.
 
 ## Testing
 
@@ -127,6 +145,7 @@ Follows [Semantic Versioning](https://semver.org/). Multi-targets `net8.0`, `net
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — release notes.
+- [SECURITY.md](SECURITY.md) — how to report a vulnerability privately.
 
 ## Contributing
 
