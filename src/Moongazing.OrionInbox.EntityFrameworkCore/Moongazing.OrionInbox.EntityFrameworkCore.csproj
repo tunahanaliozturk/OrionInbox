@@ -5,6 +5,7 @@
     <PackageTags>orion;inbox;exactly-once;ef-core;entity-framework;dedup;transactional;messaging</PackageTags>
     <RootNamespace>Moongazing.OrionInbox.EntityFrameworkCore</RootNamespace>
     <Product>OrionInbox.EntityFrameworkCore</Product>
+    <PackageReadmeFile>docs/README.md</PackageReadmeFile>
     <!--
       Not marked IsAotCompatible: EF Core is not NativeAOT/trim-clean, so a full AOT publish of
       this package would surface IL warnings from EF Core itself. The framework-free OrionInbox
@@ -18,6 +19,9 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs/README.md" Pack="true" PackagePath="docs/" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moongazing.OrionInbox.EntityFrameworkCore.Tests" />

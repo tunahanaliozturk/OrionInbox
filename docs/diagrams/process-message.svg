@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000">
+  <!--
+    Orion family diagram template. Copy it, keep <defs> and <style>, replace the body.
+    Classes: .step (our code) .ext (backend / external system) .ok (success end) .fail (failure path)
+             .decision (diamond) .note (side remark) .lane (sequence lifeline)
+    Arrows: class="flow" (main path), "flow alt" (alternate / failure path, dashed), "flow back" (response).
+  -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif; fill: #1e1b4b; }
+    .title { font-size: 24px; font-weight: 700; }
+    .subtitle { font-size: 14px; fill: #475569; }
+    .label { font-size: 15px; font-weight: 600; }
+    .small { font-size: 12.5px; fill: #475569; }
+    .code { font-family: "Cascadia Code", Consolas, "SF Mono", monospace; font-size: 13px; fill: #3730a3; }
+    .edge { font-size: 12.5px; fill: #334155; }
+    .step { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+    .ext { fill: #f0f9ff; stroke: #0284c7; stroke-width: 2; }
+    .ok { fill: #ecfdf5; stroke: #059669; stroke-width: 2; }
+    .fail { fill: #fef2f2; stroke: #dc2626; stroke-width: 2; }
+    .decision { fill: #fffbeb; stroke: #d97706; stroke-width: 2; }
+    .note { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .lane { stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .flow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
+    .flow.alt { stroke: #dc2626; stroke-dasharray: 6 4; marker-end: url(#arrow-fail); }
+    .flow.back { stroke-dasharray: 6 4; }
+    .badge { fill: #4f46e5; }
+    .badge-text { font-size: 12px; font-weight: 700; fill: #ffffff; }
+  </style>
+
+  <rect width="1200" height="1000" fill="#ffffff"/>
+
+  <text class="title" x="40" y="52">OrionInbox - processing one delivery</text>
+  <text class="subtitle" x="40" y="78">EfCoreInbox.ProcessAsync claims the message id with a dedup row, then runs the handler in the same transaction.</text>
+
+  <!-- start -->
+  <rect class="step" x="80" y="110" width="360" height="64" rx="14"/>
+  <text class="label" x="260" y="136" text-anchor="middle">Delivery arrives</text>
+  <text class="code" x="260" y="158" text-anchor="middle">ProcessAsync&lt;T&gt;(messageId, payload)</text>
+  <path class="flow" d="M260,174 L260,206"/>
+
+  <!-- D1: fast path -->
+  <polygon class="decision" points="260,208 400,258 260,308 120,258"/>
+  <text class="code" x="260" y="254" text-anchor="middle">ExistsAsync</text>
+  <text class="small" x="260" y="274" text-anchor="middle">id already committed?</text>
+
+  <path class="flow" d="M400,258 L858,258"/>
+  <text class="edge" x="629" y="248" text-anchor="middle">yes: an earlier delivery committed</text>
+  <text class="small" x="629" y="278" text-anchor="middle">fast path, no transaction opened</text>
+  <rect class="ok" x="860" y="222" width="300" height="72" rx="14"/>
+  <text class="code" x="1010" y="252" text-anchor="middle">InboxResult.Duplicate</text>
+  <text class="small" x="1010" y="274" text-anchor="middle">handler skipped; ack the message</text>
+
+  <path class="flow" d="M260,308 L260,338"/>
+  <text class="edge" x="270" y="328">no</text>
+
+  <!-- S1: resolve handler -->
+  <rect class="step" x="80" y="340" width="360" height="64" rx="14"/>
+  <text class="label" x="260" y="366" text-anchor="middle">Resolve the handler</text>
+  <text class="code" x="260" y="388" text-anchor="middle">IInboxHandler&lt;T&gt;</text>
+
+  <path class="flow alt" d="M440,372 L858,372"/>
+  <text class="edge" x="649" y="362" text-anchor="middle">not registered</text>
+  <rect class="fail" x="860" y="340" width="300" height="64" rx="14"/>
+  <text class="code" x="1010" y="366" text-anchor="middle">InvalidOperationException</text>
+  <text class="small" x="1010" y="388" text-anchor="middle">AddInboxHandler was not called</text>
+
+  <path class="flow" d="M260,404 L260,436"/>
+
+  <!-- S2: claim -->
+  <rect class="step" x="80" y="438" width="360" height="84" rx="14"/>
+  <text class="label" x="260" y="464" text-anchor="middle">Claim the id: insert the dedup row</text>
+  <text class="code" x="260" y="486" text-anchor="middle">BeginTransactionAsync</text>
+  <text class="code" x="260" y="508" text-anchor="middle">Add(row) + SaveChangesAsync</text>
+
+  <path class="flow" d="M260,522 L260,554"/>
+
+  <!-- D2: insert rejected -->
+  <polygon class="decision" points="260,556 400,606 260,656 120,606"/>
+  <text class="code" x="260" y="602" text-anchor="middle">DbUpdateException</text>
+  <text class="small" x="260" y="622" text-anchor="middle">on the insert?</text>
+
+  <path class="flow alt" d="M400,606 L478,606"/>
+  <text class="edge" x="439" y="596" text-anchor="middle">yes</text>
+
+  <rect class="step" x="480" y="566" width="210" height="80" rx="14"/>
+  <text class="label" x="585" y="592" text-anchor="middle">Roll back</text>
+  <text class="code" x="585" y="612" text-anchor="middle">ExistsAsync</text>
+  <text class="small" x="585" y="634" text-anchor="middle">re-query outside the txn</text>
+
+  <path class="flow" d="M690,606 L748,606"/>
+
+  <polygon class="decision" points="850,556 950,606 850,656 750,606"/>
+  <text class="small" x="850" y="610" text-anchor="middle">row exists now?</text>
+
+  <path class="flow" d="M950,606 L988,606"/>
+  <text class="edge" x="969" y="596" text-anchor="middle">yes</text>
+  <rect class="ok" x="990" y="566" width="190" height="80" rx="14"/>
+  <text class="code" x="1085" y="594" text-anchor="middle">InboxResult.Duplicate</text>
+  <text class="small" x="1085" y="614" text-anchor="middle">a concurrent delivery</text>
+  <text class="small" x="1085" y="634" text-anchor="middle">won the race; ack</text>
+
+  <path class="flow alt" d="M850,656 L850,686"/>
+  <text class="edge" x="860" y="676">no</text>
+  <rect class="fail" x="700" y="688" width="300" height="64" rx="14"/>
+  <text class="code" x="850" y="714" text-anchor="middle">rethrow DbUpdateException</text>
+  <text class="small" x="850" y="736" text-anchor="middle">genuine storage fault; do not ack</text>
+
+  <path class="flow" d="M260,656 L260,786"/>
+  <text class="edge" x="270" y="676">no: the id is claimed</text>
+
+  <!-- S4: handler -->
+  <rect class="step" x="80" y="788" width="360" height="64" rx="14"/>
+  <text class="label" x="260" y="814" text-anchor="middle">Run the handler, same transaction</text>
+  <text class="code" x="260" y="836" text-anchor="middle">HandleAsync(InboxMessage&lt;T&gt;)</text>
+
+  <path class="flow alt" d="M440,820 L518,820"/>
+  <text class="edge" x="479" y="810" text-anchor="middle">throws</text>
+  <rect class="fail" x="520" y="788" width="650" height="84" rx="14"/>
+  <text class="label" x="540" y="814">Handler throws: the transaction rolls back</text>
+  <text class="small" x="540" y="836">No dedup row and no effects are stored; the exception propagates to your consumer.</text>
+  <text class="small" x="540" y="856">Do not ack: the broker redelivers, and the retry runs the handler again from a clean state.</text>
+
+  <path class="flow" d="M260,852 L260,904"/>
+
+  <!-- S5: commit -->
+  <rect class="step" x="80" y="906" width="360" height="64" rx="14"/>
+  <text class="label" x="260" y="932" text-anchor="middle">Save and commit</text>
+  <text class="code" x="260" y="954" text-anchor="middle">SaveChangesAsync + CommitAsync</text>
+
+  <path class="flow" d="M440,938 L518,938"/>
+  <rect class="ok" x="520" y="906" width="400" height="64" rx="14"/>
+  <text class="code" x="720" y="932" text-anchor="middle">InboxResult.Processed</text>
+  <text class="small" x="720" y="954" text-anchor="middle">dedup row and effects committed together; ack</text>
+</svg>

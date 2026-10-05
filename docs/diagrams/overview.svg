@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="644" viewBox="0 0 1200 644">
+  <!--
+    Orion family diagram template. Copy it, keep <defs> and <style>, replace the body.
+    Classes: .step (our code) .ext (backend / external system) .ok (success end) .fail (failure path)
+             .decision (diamond) .note (side remark) .lane (sequence lifeline)
+    Arrows: class="flow" (main path), "flow alt" (alternate / failure path, dashed), "flow back" (response).
+  -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif; fill: #1e1b4b; }
+    .title { font-size: 24px; font-weight: 700; }
+    .subtitle { font-size: 14px; fill: #475569; }
+    .label { font-size: 15px; font-weight: 600; }
+    .small { font-size: 12.5px; fill: #475569; }
+    .code { font-family: "Cascadia Code", Consolas, "SF Mono", monospace; font-size: 13px; fill: #3730a3; }
+    .edge { font-size: 12.5px; fill: #334155; }
+    .step { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+    .ext { fill: #f0f9ff; stroke: #0284c7; stroke-width: 2; }
+    .ok { fill: #ecfdf5; stroke: #059669; stroke-width: 2; }
+    .fail { fill: #fef2f2; stroke: #dc2626; stroke-width: 2; }
+    .decision { fill: #fffbeb; stroke: #d97706; stroke-width: 2; }
+    .note { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .lane { stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .flow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
+    .flow.alt { stroke: #dc2626; stroke-dasharray: 6 4; marker-end: url(#arrow-fail); }
+    .flow.back { stroke-dasharray: 6 4; }
+    .badge { fill: #4f46e5; }
+    .badge-text { font-size: 12px; font-weight: 700; fill: #ffffff; }
+  </style>
+
+  <rect width="1200" height="644" fill="#ffffff"/>
+
+  <text class="title" x="40" y="52">OrionInbox - where it sits</text>
+  <text class="subtitle" x="40" y="78">The broker may deliver a message more than once; the inbox makes its effect land once, in your own database.</text>
+
+  <!-- row 1: the outbox to inbox loop -->
+  <rect class="ext" x="40" y="110" width="240" height="80" rx="14"/>
+  <text class="label" x="160" y="140" text-anchor="middle">Producer service</text>
+  <text class="small" x="160" y="161" text-anchor="middle">state + outbox row in one txn</text>
+  <text class="small" x="160" y="179" text-anchor="middle">for example OrionPatch</text>
+
+  <path class="flow" d="M280,150 L358,150"/>
+  <text class="edge" x="319" y="140" text-anchor="middle">publish</text>
+
+  <rect class="ext" x="360" y="110" width="240" height="80" rx="14"/>
+  <text class="label" x="480" y="140" text-anchor="middle">Broker</text>
+  <text class="small" x="480" y="161" text-anchor="middle">at-least-once delivery</text>
+  <text class="small" x="480" y="179" text-anchor="middle">may redeliver the same message id</text>
+
+  <path class="flow" d="M600,150 L698,150"/>
+  <text class="edge" x="649" y="140" text-anchor="middle">deliver</text>
+
+  <rect class="step" x="700" y="110" width="460" height="80" rx="14"/>
+  <text class="label" x="930" y="140" text-anchor="middle">Your consumer</text>
+  <text class="small" x="930" y="161" text-anchor="middle">broker handler, webhook receiver or polling worker</text>
+  <text class="small" x="930" y="179" text-anchor="middle">one DI scope per delivery</text>
+
+  <path class="flow" d="M930,190 L930,248"/>
+  <text class="code" x="918" y="224" text-anchor="end">IOrionInbox.ProcessAsync&lt;T&gt;(messageId, payload)</text>
+
+  <!-- row 2: the processor -->
+  <rect class="step" x="700" y="250" width="460" height="80" rx="14"/>
+  <text class="label" x="930" y="276" text-anchor="middle">Inbox processor</text>
+  <text class="code" x="930" y="298" text-anchor="middle">EfCoreInbox&lt;TDbContext&gt; : IOrionInbox</text>
+  <text class="small" x="930" y="318" text-anchor="middle">scoped; shares the delivery's DbContext</text>
+
+  <path class="flow" d="M805,330 L805,398"/>
+  <text class="code" x="797" y="368" text-anchor="end">HandleAsync</text>
+  <path class="flow" d="M1055,330 L1055,398"/>
+  <text class="edge" x="1063" y="368">one transaction</text>
+
+  <!-- row 3: handler and database -->
+  <rect class="step" x="700" y="400" width="210" height="84" rx="14"/>
+  <text class="label" x="805" y="428" text-anchor="middle">Your handler</text>
+  <text class="code" x="805" y="450" text-anchor="middle">IInboxHandler&lt;T&gt;</text>
+  <text class="small" x="805" y="470" text-anchor="middle">adds writes, no SaveChanges</text>
+
+  <path class="flow" d="M910,442 L948,442"/>
+
+  <rect class="ext" x="950" y="400" width="210" height="84" rx="14"/>
+  <text class="label" x="1055" y="428" text-anchor="middle">Your DbContext</text>
+  <text class="code" x="1055" y="450" text-anchor="middle">OrionInbox_Messages</text>
+  <text class="small" x="1055" y="470" text-anchor="middle">+ your domain tables</text>
+
+  <!-- row 4: retention -->
+  <path class="flow" d="M1055,530 L1055,486"/>
+  <text class="code" x="1063" y="512">PruneAsync</text>
+
+  <rect class="step" x="700" y="530" width="460" height="84" rx="14"/>
+  <text class="label" x="930" y="556" text-anchor="middle">Background prune</text>
+  <text class="code" x="930" y="578" text-anchor="middle">InboxPruneHostedService&lt;TDbContext&gt;</text>
+  <text class="small" x="930" y="600" text-anchor="middle">every PruneInterval (1 h): deletes rows older than DedupWindow (7 d)</text>
+
+  <!-- packages -->
+  <rect class="note" x="40" y="250" width="600" height="120" rx="12"/>
+  <text class="label" x="60" y="280">OrionInbox</text>
+  <text class="small" x="160" y="280">framework-free core, AOT- and trim-clean</text>
+  <text class="code" x="60" y="316">IOrionInbox, IInboxHandler&lt;T&gt;, InboxMessage&lt;T&gt;</text>
+  <text class="code" x="60" y="342">InboxResult, InboxOptions, InboxDiagnostics</text>
+
+  <rect class="note" x="40" y="400" width="600" height="214" rx="12"/>
+  <text class="label" x="60" y="430">OrionInbox.EntityFrameworkCore</text>
+  <text class="small" x="60" y="451">the EF Core store; depends on OrionInbox</text>
+  <text class="code" x="60" y="484">services.AddOrionInbox&lt;TDbContext&gt;()</text>
+  <text class="code" x="60" y="508">services.AddInboxHandler&lt;TMessage, THandler&gt;()</text>
+  <text class="code" x="60" y="532">modelBuilder.ApplyOrionInboxConfiguration()</text>
+  <text class="code" x="60" y="556">EfCoreInbox&lt;TDbContext&gt;, InboxMessageRow</text>
+  <text class="code" x="60" y="580">InboxPruneHostedService&lt;TDbContext&gt;</text>
+</svg>
